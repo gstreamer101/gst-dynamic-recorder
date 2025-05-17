@@ -21,11 +21,11 @@
 ### Installation
 1. Git clone
    ```sh
-   $> git clone https://github.com/Taeil-Nam/GStreamer
+   $> git clone https://github.com/gstreamer101/gst-dynamic-recorder.git
    ```
 2. Move to project directory
    ```sh
-   $> cd GStreamer/rtsp_server_example
+   $> cd gst-dynamic-recorder/examples/rtsp_server_example
    ```
 3. Compile the program
    ```sh
