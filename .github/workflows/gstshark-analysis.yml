@@ -1,0 +1,71 @@
+name: GStreamer Performance Analysis
+
+on:
+  pull_request:
+
+jobs:
+  analyze-performance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gstreamer1.0-tools \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly \
+            gstreamer1.0-libav \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            octave \
+            graphviz \
+            libgraphviz-dev \
+            babeltrace \
+            python3-pip
+          pip3 install pygithub
+
+      - name: Clone and build GstShark
+        run: |
+          git clone https://github.com/RidgeRun/gst-shark.git
+          cd gst-shark
+          ./autogen.sh --prefix=/usr --libdir=/usr/lib/x86_64-linux-gnu/
+          make -j$(nproc)
+          sudo make install
+
+      - name: Run GStreamer pipeline with GstShark tracers
+        run: |
+          mkdir -p gstshark-traces
+          export GST_DEBUG="GST_TRACER:7"
+          export GST_TRACERS="interlatency;proctime;cpuusage;framerate"
+          gst-launch-1.0 \
+            videotestsrc num-buffers=300 ! \
+            videoconvert ! \
+            autovideosink \
+            --gst-tracer-path=./gstshark-traces
+
+      - name: Generate plots using gstshark-plot
+        run: |
+          cd gstshark-traces
+          gstshark-plot . --savefig png
+
+      - name: Upload plots as artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: gstshark-plots
+          path: gstshark-traces/*.png
+
+      - name: Post comment to PR with plot links
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=$(jq --raw-output .pull_request.number "$GITHUB_EVENT_PATH")
+          COMMENT_BODY="### GstShark Performance Analysis\n\n"
+          for plot in gstshark-traces/*.png; do
+            COMMENT_BODY+="![${plot##*/}](https://github.com/${{ github.repository }}/raw/${{ github.sha }}/$plot)\n\n"
+          done
+          gh pr comment "$PR_NUMBER" --body "$COMMENT_BODY"
